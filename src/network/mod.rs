@@ -71,7 +71,7 @@ impl From<LiquidChain> for &'static AddressParams {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Network {
     Mainnet,
     Testnet,

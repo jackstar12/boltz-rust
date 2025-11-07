@@ -13,26 +13,23 @@ use lightning_invoice::Bolt11Invoice;
 use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
-use crate::network::{BitcoinChain, Chain, LiquidChain};
+use crate::network::Network;
 
 const SUBMARINE_SWAP_ACCOUNT: u32 = 21;
 const REVERSE_SWAP_ACCOUNT: u32 = 42;
 const CHAIN_SWAP_ACCOUNT: u32 = 84;
 
-fn chain_to_bitcoin_network(chain: Chain) -> bitcoin::Network {
-    match chain {
-        Chain::Bitcoin(bitcoin_chain) => bitcoin_chain.into(),
-        Chain::Liquid(liquid_chain) => match liquid_chain {
-            LiquidChain::Liquid => bitcoin::Network::Bitcoin,
-            LiquidChain::LiquidTestnet => bitcoin::Network::Testnet,
-            LiquidChain::LiquidRegtest => bitcoin::Network::Regtest,
-        },
+fn network_to_bitcoin_network(network: Network) -> bitcoin::Network {
+    match network {
+        Network::Mainnet => bitcoin::Network::Bitcoin,
+        Network::Testnet => bitcoin::Network::Testnet,
+        Network::Regtest => bitcoin::Network::Regtest,
     }
 }
 
-fn get_network_path(network: Chain) -> u32 {
+fn get_network_path(network: Network) -> u32 {
     match network {
-        Chain::Bitcoin(BitcoinChain::Bitcoin) | Chain::Liquid(LiquidChain::Liquid) => 0,
+        Network::Mainnet => 0,
         _ => 1,
     }
 }
@@ -40,12 +37,12 @@ fn get_network_path(network: Chain) -> u32 {
 fn derive_root_xpriv(
     mnemonic: &str,
     passphrase: &str,
-    network: Chain,
+    network: Network,
 ) -> Result<(Secp256k1<bitcoin::secp256k1::All>, Xpriv), Error> {
     let secp = Secp256k1::new();
     let mnemonic_struct = Mnemonic::from_str(mnemonic)?;
     let seed = mnemonic_struct.to_seed(passphrase);
-    let root = Xpriv::new_master(chain_to_bitcoin_network(network), &seed)?;
+    let root = Xpriv::new_master(network_to_bitcoin_network(network), &seed)?;
     Ok((secp, root))
 }
 
@@ -56,17 +53,17 @@ fn build_base_path(purpose: DerivationPurpose, network_path: u32, account: u32) 
 /// Swap key xpriv for reverse, submarine, and chain swaps
 /// Can be stored and used more easily to get SwapKeys for each swap rather than constantly passing the mnemonic and passphrase
 /// Can also be used to get the root xpubs that can be used with the swap/restore api
-#[derive(Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SwapXKeys {
     pub reverse: Xpriv,
     pub submarine: Xpriv,
     pub chain: Xpriv,
     pub fingerprint: Fingerprint,
-    pub network: Chain,
+    pub network: Network,
 }
 
 impl SwapXKeys {
-    pub fn derive(mnemonic: &str, passphrase: &str, network: Chain) -> Result<SwapXKeys, Error> {
+    pub fn derive(mnemonic: &str, passphrase: &str, network: Network) -> Result<SwapXKeys, Error> {
         let (secp, root) = derive_root_xpriv(mnemonic, passphrase, network)?;
         let fingerprint = root.fingerprint(&secp);
         let network_path = get_network_path(network);
@@ -190,7 +187,7 @@ impl SwapKey {
     fn from_mnemonic(
         mnemonic: &str,
         passphrase: &str,
-        network: Chain,
+        network: Network,
         path: DerivationPath,
     ) -> Result<SwapKey, Error> {
         let (secp, root) = derive_root_xpriv(mnemonic, passphrase, network)?;
@@ -210,7 +207,7 @@ impl SwapKey {
     pub fn from_submarine_account(
         mnemonic: &str,
         passphrase: &str,
-        network: Chain,
+        network: Network,
         index: u64,
     ) -> Result<SwapKey, Error> {
         Self::from_mnemonic(
@@ -232,7 +229,7 @@ impl SwapKey {
     pub fn from_reverse_account(
         mnemonic: &str,
         passphrase: &str,
-        network: Chain,
+        network: Network,
         index: u64,
     ) -> Result<SwapKey, Error> {
         Self::from_mnemonic(
@@ -254,7 +251,7 @@ impl SwapKey {
     pub fn from_chain_account(
         mnemonic: &str,
         passphrase: &str,
-        network: Chain,
+        network: Network,
         index: u64,
     ) -> Result<SwapKey, Error> {
         Self::from_mnemonic(
@@ -433,13 +430,7 @@ mod tests {
     fn test_derivation() {
         let mnemonic: &str = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let index = 0_u64; // 0
-        let sk = SwapKey::from_submarine_account(
-            mnemonic,
-            "",
-            Chain::Bitcoin(BitcoinChain::Bitcoin),
-            index,
-        )
-        .unwrap();
+        let sk = SwapKey::from_submarine_account(mnemonic, "", Network::Mainnet, index).unwrap();
         let lsk: LiquidSwapKey = match LiquidSwapKey::try_from(sk.clone()) {
             Ok(t) => t,
             Err(e) => {
@@ -510,7 +501,7 @@ mod tests {
     #[macros::test_all]
     fn test_derive_swap_key_from_xpub() -> Result<(), Error> {
         let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
-        let network = Chain::Bitcoin(BitcoinChain::Bitcoin);
+        let network = Network::Mainnet;
         let index = 1;
 
         let chain_swap_key = SwapKey::from_chain_account(mnemonic, "", network, index)?;
@@ -550,7 +541,7 @@ mod tests {
     fn test_swap_xkeys_backward_compatibility() -> Result<(), Error> {
         let mnemonic = "bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon bacon";
         let passphrase = "";
-        let network = Chain::Bitcoin(BitcoinChain::Bitcoin);
+        let network = Network::Mainnet;
         let indices = vec![0, 1, 5, 10, 100];
 
         let swap_xkeys = SwapXKeys::derive(mnemonic, passphrase, network)?;

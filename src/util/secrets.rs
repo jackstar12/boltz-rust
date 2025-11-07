@@ -50,8 +50,8 @@ fn build_base_path(purpose: DerivationPurpose, network_path: u32, account: u32) 
     format!("m/{purpose}h/{network_path}h/{account}h/0")
 }
 
-/// Swap key xpriv for reverse, submarine, and chain swaps
-/// Can be stored and used more easily to get SwapKeys for each swap rather than constantly passing the mnemonic and passphrase
+/// Swap key xpriv to derive swap keys for reverse, submarine, and chain swaps
+/// Can be stored and used more easily to get SwapKeys for each swap rather than constantly passing the mnemonic and passphrase to SwapKey methods
 /// Can also be used to get the root xpubs that can be used with the swap/restore api
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct SwapXKeys {
@@ -63,7 +63,7 @@ pub struct SwapXKeys {
 }
 
 impl SwapXKeys {
-    pub fn derive(mnemonic: &str, passphrase: &str, network: Network) -> Result<SwapXKeys, Error> {
+    pub fn new(mnemonic: &str, passphrase: &str, network: Network) -> Result<SwapXKeys, Error> {
         let (secp, root) = derive_root_xpriv(mnemonic, passphrase, network)?;
         let fingerprint = root.fingerprint(&secp);
         let network_path = get_network_path(network);
@@ -96,7 +96,7 @@ impl SwapXKeys {
         })
     }
 
-    pub fn derive_submarine_key(&self, index: u64) -> Result<SwapKey, Error> {
+    pub fn derive_submarine_swapkey(&self, index: u64) -> Result<SwapKey, Error> {
         let network_path = get_network_path(self.network);
         let base_path = build_base_path(
             DerivationPurpose::Compatible,
@@ -113,7 +113,7 @@ impl SwapXKeys {
         Ok(swap_key)
     }
 
-    pub fn derive_reverse_key(&self, index: u64) -> Result<SwapKey, Error> {
+    pub fn derive_reverse_swapkey(&self, index: u64) -> Result<SwapKey, Error> {
         let network_path = get_network_path(self.network);
         let base_path = build_base_path(
             DerivationPurpose::Native,
@@ -130,7 +130,7 @@ impl SwapXKeys {
         Ok(swap_key)
     }
 
-    pub fn derive_chain_key(&self, index: u64) -> Result<SwapKey, Error> {
+    pub fn derive_chain_swapkey(&self, index: u64) -> Result<SwapKey, Error> {
         let network_path = get_network_path(self.network);
         let base_path =
             build_base_path(DerivationPurpose::Taproot, network_path, CHAIN_SWAP_ACCOUNT);
@@ -508,7 +508,7 @@ mod tests {
         let reverse_swap_key = SwapKey::from_reverse_account(mnemonic, "", network, index)?;
         let submarine_swap_key = SwapKey::from_submarine_account(mnemonic, "", network, index)?;
 
-        let root_xprivs = SwapXKeys::derive(mnemonic, "", network)?;
+        let root_xprivs = SwapXKeys::new(mnemonic, "", network)?;
 
         let secp = Secp256k1::new();
         let child_path = DerivationPath::from_str("m/1")?;
@@ -544,11 +544,11 @@ mod tests {
         let network = Network::Mainnet;
         let indices = vec![0, 1, 5, 10, 100];
 
-        let swap_xkeys = SwapXKeys::derive(mnemonic, passphrase, network)?;
+        let swap_xkeys = SwapXKeys::new(mnemonic, passphrase, network)?;
 
         for index in indices {
             let chain_key_old = SwapKey::from_chain_account(mnemonic, passphrase, network, index)?;
-            let chain_key_new = swap_xkeys.derive_chain_key(index)?;
+            let chain_key_new = swap_xkeys.derive_chain_swapkey(index)?;
             assert_eq!(chain_key_old.path, chain_key_new.path);
             assert_eq!(chain_key_old.fingerprint, chain_key_new.fingerprint);
             assert_eq!(
@@ -562,7 +562,7 @@ mod tests {
 
             let reverse_key_old =
                 SwapKey::from_reverse_account(mnemonic, passphrase, network, index)?;
-            let reverse_key_new = swap_xkeys.derive_reverse_key(index)?;
+            let reverse_key_new = swap_xkeys.derive_reverse_swapkey(index)?;
             assert_eq!(reverse_key_old.path, reverse_key_new.path);
             assert_eq!(reverse_key_old.fingerprint, reverse_key_new.fingerprint);
             assert_eq!(
@@ -576,7 +576,7 @@ mod tests {
 
             let submarine_key_old =
                 SwapKey::from_submarine_account(mnemonic, passphrase, network, index)?;
-            let submarine_key_new = swap_xkeys.derive_submarine_key(index)?;
+            let submarine_key_new = swap_xkeys.derive_submarine_swapkey(index)?;
             assert_eq!(submarine_key_old.path, submarine_key_new.path);
             assert_eq!(submarine_key_old.fingerprint, submarine_key_new.fingerprint);
             assert_eq!(

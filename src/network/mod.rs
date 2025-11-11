@@ -1,7 +1,7 @@
 use core::fmt;
 
 use crate::error::Error;
-use elements::AddressParams;
+use elements::{AddressParams, AssetId};
 
 #[cfg(feature = "electrum")]
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
@@ -59,6 +59,16 @@ pub enum LiquidChain {
     Liquid,
     LiquidTestnet,
     LiquidRegtest,
+}
+
+impl LiquidChain {
+    pub fn bit(self) -> AssetId {
+        match self {
+            LiquidChain::Liquid => AssetId::LIQUID_BTC,
+            LiquidChain::LiquidTestnet => AssetId::LIQUID_TESTNET,
+            LiquidChain::LiquidRegtest => AssetId::LIQUID_REGTEST,
+        }
+    }
 }
 
 impl From<LiquidChain> for &'static AddressParams {

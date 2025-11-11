@@ -1186,6 +1186,19 @@ impl CreateReverseResponse {
             }
         }
     }
+
+    pub fn validate_amounts(&self, fee_rate: &f64) -> Result<(), Error> {
+        let claim_fee = estimate_claim_fee(chain, estimations)?;
+        let lockup_fee = estimate_lockup_fee(chain, estimations)?;
+        let total_fee = claim_fee + lockup_fee;
+        if self.onchain_amount < total_fee {
+            return Err(Error::Protocol(format!(
+                "Onchain amount is less than the total fee: {} < {}",
+                self.onchain_amount, total_fee
+            )));
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
